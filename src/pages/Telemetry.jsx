@@ -71,7 +71,10 @@ function TelemetryTable({ title, rows, emptyMessage }) {
                     {row.durationMs != null ? `${row.durationMs}ms` : "—"}
                   </TableCell>
                   <TableCell sx={{ fontFamily: "ui-monospace, monospace", fontSize: 12.5, color: "text.disabled", borderColor: "rgba(255,255,255,0.05)" }}>
-                    {row.timestamp ? new Date(row.timestamp).toLocaleString() : "—"}
+                    {row.timestamp
+                      ? new Date(row.timestamp.endsWith('Z') ? row.timestamp : row.timestamp + 'Z')
+                        .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'medium' })
+                      : "—"}
                   </TableCell>
                 </TableRow>
               ))}
