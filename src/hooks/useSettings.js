@@ -13,6 +13,13 @@ export default function useSettings() {
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Separate state for the reset feature — kept independent from the
+  // threshold-save state above since they're unrelated actions on the
+  // same page and shouldn't share a loading/error/success flag.
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState(null);
+  const [resetSuccess, setResetSuccess] = useState(null); // holds the result object on success, not just a boolean
+
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -43,9 +50,45 @@ export default function useSettings() {
     }
   }, []);
 
+  // Wipes telemetry + slow query plans for one application. Token is passed
+  // in per-call (typed by the user at reset time), never stored in state
+  // beyond the lifetime of this request, never persisted anywhere.
+  const resetApplication = useCallback(async (applicationName, token) => {
+    setResetting(true);
+    setResetError(null);
+    setResetSuccess(null);
+    try {
+      const res = await apiClient.delete("/api/admin/reset-application", {
+        params: { applicationName },
+        headers: { "X-Admin-Token": token },
+      });
+      setResetSuccess(res.data);
+      return { ok: true, data: res.data };
+    } catch (err) {
+      console.error("Reset failed:", err.message);
+      setResetError(err);
+      return { ok: false, error: err };
+    } finally {
+      setResetting(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
 
-  return { settings, loading, saving, error, saveError, saveSuccess, saveSettings, refetch: fetchSettings };
+  return {
+    settings,
+    loading,
+    saving,
+    error,
+    saveError,
+    saveSuccess,
+    saveSettings,
+    refetch: fetchSettings,
+    resetting,
+    resetError,
+    resetSuccess,
+    resetApplication,
+  };
 }

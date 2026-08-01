@@ -1,10 +1,17 @@
 import { useState, useEffect } from "react";
-import { Box, Typography, TextField, Button, CircularProgress, Paper, Grid } from "@mui/material";
+import {
+  Box, Typography, TextField, Button, CircularProgress, Paper, Grid,
+  Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText,
+} from "@mui/material";
 import Header from "../components/Header";
 import useSettings from "../hooks/useSettings";
+import apiClient from "../api/client";
 
 function Settings() {
-  const { settings, loading, saving, error, saveError, saveSuccess, saveSettings } = useSettings();
+  const {
+    settings, loading, saving, error, saveError, saveSuccess, saveSettings,
+    resetting, resetError, resetSuccess, resetApplication,
+  } = useSettings();
 
   const [form, setForm] = useState({
     slowRequestThresholdMs: "",
@@ -16,6 +23,46 @@ function Settings() {
     lowVarianceThreshold: "",
     possibleNPlusOneQueryThreshold: "",
   });
+
+  // Apps available to reset — fetched independently of the app-selector
+  // context, since Settings should list every known app regardless of
+  // which one is currently selected in the dropdown elsewhere.
+  const [apps, setApps] = useState([]);
+  useEffect(() => {
+    apiClient
+      .get("/api/dashboard/applications")
+      .then((res) => setApps(Array.isArray(res.data) ? res.data : []))
+      .catch((err) => console.error("Fetch applications failed:", err.message));
+  }, []);
+
+  // Reset confirmation dialog state — which app is being reset (null = closed),
+  // the token the user types in (never persisted, cleared on close), and the
+  // app-name confirmation text (cheap guard against misclicks).
+  const [resetTarget, setResetTarget] = useState(null);
+  const [confirmText, setConfirmText] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
+
+  const openResetDialog = (appName) => {
+    setResetTarget(appName);
+    setConfirmText("");
+    setTokenInput("");
+  };
+
+  const closeResetDialog = () => {
+    setResetTarget(null);
+    setConfirmText("");
+    setTokenInput("");
+  };
+
+  const handleConfirmReset = async () => {
+    if (confirmText !== resetTarget) return; // shouldn't happen, button is disabled until match
+    const result = await resetApplication(resetTarget, tokenInput);
+    if (result.ok) {
+      closeResetDialog();
+    }
+    // On failure, dialog stays open so the user can see resetError and retry
+    // (e.g. mistyped token) without re-entering the app name confirmation.
+  };
 
   useEffect(() => {
     if (settings) {
@@ -249,6 +296,130 @@ function Settings() {
               </Grid>
             </Grid>
           </Paper>
+        )}
+
+        {/* Reset section — separate card, deliberately visually distinct (red-tinted
+            border) from the settings form above since these are destructive actions. */}
+        <Paper
+          variant="outlined"
+          sx={{
+            padding: 3,
+            marginTop: 3,
+            backgroundColor: "#111113",
+            borderColor: "rgba(229,72,77,0.25)",
+          }}
+        >
+          <Typography variant="h6" sx={{ color: "#EDEDEF", fontSize: "16.5px", marginBottom: 0.5 }}>
+            Reset Application Data
+          </Typography>
+          <Typography variant="body2" sx={{ color: "#8C8C93", fontSize: "14.5px", marginBottom: 2 }}>
+            Permanently deletes all telemetry and slow-query-plan records for the selected application only — other applications are never affected. This cannot be undone. Requires the admin reset token configured on the server.
+          </Typography>
+
+          {apps.length === 0 ? (
+            <Typography sx={{ color: "#57575F", fontSize: "14px" }}>No applications found yet.</Typography>
+          ) : (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              {apps.map((appName) => (
+                <Box
+                  key={appName}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    backgroundColor: "#0C0C0E",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <Typography sx={{ color: "#EDEDEF", fontFamily: "ui-monospace, monospace", fontSize: "14.5px" }}>
+                    {appName}
+                  </Typography>
+                  <Button
+                    onClick={() => openResetDialog(appName)}
+                    sx={{
+                      textTransform: "none",
+                      color: "#F5A3A3",
+                      backgroundColor: "rgba(229,72,77,0.08)",
+                      border: "1px solid rgba(229,72,77,0.25)",
+                      padding: "4px 14px",
+                      fontSize: "13.5px",
+                      "&:hover": { backgroundColor: "rgba(229,72,77,0.14)" },
+                    }}
+                  >
+                    Reset Data
+                  </Button>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Paper>
+
+        <Dialog open={resetTarget !== null} onClose={closeResetDialog} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ color: "#EDEDEF", backgroundColor: "#111113" }}>
+            Reset "{resetTarget}" data?
+          </DialogTitle>
+          <DialogContent sx={{ backgroundColor: "#111113" }}>
+            <DialogContentText sx={{ color: "#8C8C93", fontSize: "14px", marginBottom: 2 }}>
+              This permanently deletes all telemetry and slow-query-plan records for{" "}
+              <strong style={{ color: "#EDEDEF" }}>{resetTarget}</strong> only. Type the application name below to confirm, then enter the admin reset token.
+            </DialogContentText>
+            <TextField
+              autoFocus
+              fullWidth
+              label={`Type "${resetTarget}" to confirm`}
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              sx={{ marginBottom: 2, ...fieldSx }}
+            />
+            <TextField
+              fullWidth
+              type="password"
+              label="Admin reset token"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              sx={fieldSx}
+            />
+            {resetError && (
+              <Box
+                sx={{
+                  marginTop: 2,
+                  padding: "8px 12px",
+                  borderRadius: "4px",
+                  color: "#F5A3A3",
+                  backgroundColor: "rgba(229,72,77,0.12)",
+                  fontSize: "13.5px",
+                }}
+              >
+                Reset failed — check the token is correct and try again.
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ backgroundColor: "#111113", padding: 2 }}>
+            <Button onClick={closeResetDialog} sx={{ textTransform: "none", color: "#8C8C93" }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmReset}
+              disabled={confirmText !== resetTarget || !tokenInput || resetting}
+              sx={{
+                textTransform: "none",
+                color: "#F5A3A3",
+                backgroundColor: "rgba(229,72,77,0.1)",
+                "&:hover": { backgroundColor: "rgba(229,72,77,0.18)" },
+                "&.Mui-disabled": { color: "#57575F", backgroundColor: "transparent" },
+              }}
+            >
+              {resetting ? "Resetting..." : "Permanently Reset"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {resetSuccess && (
+          <Typography sx={{ color: "#8FD9A8", fontSize: "13.5px", marginTop: 1.5 }}>
+            Reset complete for {resetSuccess.applicationName}: {resetSuccess.telemetryRowsDeleted} telemetry rows, {resetSuccess.slowQueryPlanRowsDeleted} slow-query-plan rows deleted.
+          </Typography>
         )}
       </Box>
     </>
