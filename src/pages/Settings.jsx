@@ -6,12 +6,30 @@ import {
 import Header from "../components/Header";
 import useSettings from "../hooks/useSettings";
 import apiClient from "../api/client";
+import { useSelectedApp } from "../contexts/AppContext";
 
 function Settings() {
+  // Reuses the same global app selector already in the Header (AppSelector.jsx)
+  // instead of adding a second, separate dropdown on this page. Whatever app
+  // the user has selected app-wide is what these thresholds edit.
+  const { selectedApp } = useSelectedApp();
+
+  // Apps list — used only for the Reset Application Data section below,
+  // which intentionally lists every app regardless of the global selection.
+  const [apps, setApps] = useState([]);
+  useEffect(() => {
+    apiClient
+      .get("/api/dashboard/applications")
+      .then((res) => setApps(Array.isArray(res.data) ? res.data : []))
+      .catch((err) => console.error("Fetch applications failed:", err.message));
+  }, []);
+
+  // useSettings is scoped to the globally-selected app — null/empty before
+  // AppSelector has loaded is a guarded no-op inside the hook.
   const {
     settings, loading, saving, error, saveError, saveSuccess, saveSettings,
     resetting, resetError, resetSuccess, resetApplication,
-  } = useSettings();
+  } = useSettings(selectedApp);
 
   const [form, setForm] = useState({
     slowRequestThresholdMs: "",
@@ -24,20 +42,6 @@ function Settings() {
     possibleNPlusOneQueryThreshold: "",
   });
 
-  // Apps available to reset — fetched independently of the app-selector
-  // context, since Settings should list every known app regardless of
-  // which one is currently selected in the dropdown elsewhere.
-  const [apps, setApps] = useState([]);
-  useEffect(() => {
-    apiClient
-      .get("/api/dashboard/applications")
-      .then((res) => setApps(Array.isArray(res.data) ? res.data : []))
-      .catch((err) => console.error("Fetch applications failed:", err.message));
-  }, []);
-
-  // Reset confirmation dialog state — which app is being reset (null = closed),
-  // the token the user types in (never persisted, cleared on close), and the
-  // app-name confirmation text (cheap guard against misclicks).
   const [resetTarget, setResetTarget] = useState(null);
   const [confirmText, setConfirmText] = useState("");
   const [tokenInput, setTokenInput] = useState("");
@@ -55,15 +59,15 @@ function Settings() {
   };
 
   const handleConfirmReset = async () => {
-    if (confirmText !== resetTarget) return; // shouldn't happen, button is disabled until match
+    if (confirmText !== resetTarget) return;
     const result = await resetApplication(resetTarget, tokenInput);
     if (result.ok) {
       closeResetDialog();
     }
-    // On failure, dialog stays open so the user can see resetError and retry
-    // (e.g. mistyped token) without re-entering the app name confirmation.
   };
 
+  // Re-populate the form whenever settings reload — either on first load
+  // or because selectedApp changed and useSettings re-fetched for the new app.
   useEffect(() => {
     if (settings) {
       setForm({
@@ -85,6 +89,7 @@ function Settings() {
 
   const handleSave = () => {
     saveSettings({
+      applicationName: selectedApp,
       slowRequestThresholdMs: Number(form.slowRequestThresholdMs),
       highErrorRateThreshold: Number(form.highErrorRateThreshold),
       serverErrorStatusThreshold: Number(form.serverErrorStatusThreshold),
@@ -137,8 +142,8 @@ function Settings() {
         <Typography variant="h5" sx={{ marginBottom: 1, color: "#EDEDEF" }}>
           Settings
         </Typography>
-        <Typography variant="body2" sx={{ color: "#8C8C93", marginBottom: 3, fontSize: "15.5px" }}>
-          Adjust the Diagnosis Engine's rule thresholds and lookback window. Changes apply immediately to future scans and are persisted, so they survive server restarts and redeploys.
+        <Typography variant="body2" sx={{ color: "#8C8C93", marginBottom: 1, fontSize: "15.5px" }}>
+          Adjust the Diagnosis Engine's rule thresholds and lookback window for <strong style={{ color: "#EDEDEF" }}>{selectedApp || "the selected application"}</strong> (use the app selector in the header to switch). Each application has its own independent thresholds. Changes apply immediately to future scans of this application and are persisted, so they survive server restarts and redeploys.
         </Typography>
 
         {loading ? (
@@ -271,7 +276,7 @@ function Settings() {
                       fontSize: "14.5px",
                     }}
                   >
-                    Settings saved.
+                    Settings saved for {selectedApp}.
                   </Box>
                 </Grid>
               )}
@@ -279,7 +284,7 @@ function Settings() {
               <Grid size={{ xs: 12 }}>
                 <Button
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || !selectedApp}
                   sx={{
                     textTransform: "none",
                     color: "#EDEDEF",
@@ -291,15 +296,16 @@ function Settings() {
                     "&.Mui-disabled": { color: "#57575F" },
                   }}
                 >
-                  {saving ? "Saving..." : "Save Changes"}
+                  {saving ? "Saving..." : `Save Changes for ${selectedApp || "..."}`}
                 </Button>
               </Grid>
             </Grid>
           </Paper>
         )}
 
-        {/* Reset section — separate card, deliberately visually distinct (red-tinted
-            border) from the settings form above since these are destructive actions. */}
+        {/* Reset section — separate card, unchanged in shape (already correctly
+            per-app before this change), still lists every app regardless of
+            which one is selected above for threshold editing. */}
         <Paper
           variant="outlined"
           sx={{
