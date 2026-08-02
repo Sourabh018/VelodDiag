@@ -326,38 +326,40 @@ function Settings() {
             <Typography sx={{ color: "#57575F", fontSize: "14px" }}>No applications found yet.</Typography>
           ) : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {apps.map((appName) => (
-                <Box
-                  key={appName}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    backgroundColor: "#0C0C0E",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <Typography sx={{ color: "#EDEDEF", fontFamily: "ui-monospace, monospace", fontSize: "14.5px" }}>
-                    {appName}
-                  </Typography>
-                  <Button
-                    onClick={() => openResetDialog(appName)}
+              {apps
+                .filter((appName) => appName === selectedApp)
+                .map((appName) => (
+                  <Box
+                    key={appName}
                     sx={{
-                      textTransform: "none",
-                      color: "#F5A3A3",
-                      backgroundColor: "rgba(229,72,77,0.08)",
-                      border: "1px solid rgba(229,72,77,0.25)",
-                      padding: "4px 14px",
-                      fontSize: "13.5px",
-                      "&:hover": { backgroundColor: "rgba(229,72,77,0.14)" },
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      backgroundColor: "#0C0C0E",
+                      border: "1px solid rgba(255,255,255,0.06)",
                     }}
                   >
-                    Reset Data
-                  </Button>
-                </Box>
-              ))}
+                    <Typography sx={{ color: "#EDEDEF", fontFamily: "ui-monospace, monospace", fontSize: "14.5px" }}>
+                      {appName}
+                    </Typography>
+                    <Button
+                      onClick={() => openResetDialog(appName)}
+                      sx={{
+                        textTransform: "none",
+                        color: "#F5A3A3",
+                        backgroundColor: "rgba(229,72,77,0.08)",
+                        border: "1px solid rgba(229,72,77,0.25)",
+                        padding: "4px 14px",
+                        fontSize: "13.5px",
+                        "&:hover": { backgroundColor: "rgba(229,72,77,0.14)" },
+                      }}
+                    >
+                      Reset Data
+                    </Button>
+                  </Box>
+                ))}
             </Box>
           )}
         </Paper>
