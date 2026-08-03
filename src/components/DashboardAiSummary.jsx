@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Box, Typography, Button, CircularProgress } from "@mui/material";
+import apiClient from "../api/client";
 
 function DashboardAiSummary({ applicationName }) {
   const [summary, setSummary] = useState(null);
@@ -10,11 +11,11 @@ function DashboardAiSummary({ applicationName }) {
     setLoading(true);
     setError(false);
     try {
-      const params = applicationName ? `?applicationName=${encodeURIComponent(applicationName)}` : "";
-      const res = await fetch(`/api/dashboard/ai-summary${params}`);
-      const data = await res.json();
-      setSummary(data.summary);
-    } catch {
+      const appParam = applicationName ? { applicationName } : {};
+      const res = await apiClient.get("/api/dashboard/ai-summary", { params: appParam });
+      setSummary(res.data.summary);
+    } catch (err) {
+      console.error("AI summary fetch failed:", err.message);
       setError(true);
     } finally {
       setLoading(false);
