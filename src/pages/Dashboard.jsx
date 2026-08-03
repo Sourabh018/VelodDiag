@@ -2,6 +2,7 @@ import { Grid, Box, Typography, CircularProgress } from "@mui/material";
 import Header from "../components/Header";
 import StatCard from "../components/StatCard";
 import TrendChart from "../components/TrendChart";
+import DashboardAiSummary from "../components/DashboardAiSummary";
 import useDashboardMetrics from "../hooks/useDashboardMetrics";
 import { useSelectedApp } from "../contexts/AppContext";
 
@@ -94,6 +95,8 @@ function Dashboard() {
             Could not reach VeloxDiag server — showing last known data
           </Typography>
         )}
+
+        {!loading && <DashboardAiSummary applicationName={selectedApp} />}
 
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", padding: 8 }}>
