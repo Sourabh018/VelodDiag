@@ -7,6 +7,7 @@ import BoltIcon from "@mui/icons-material/Bolt";
 import SettingsIcon from "@mui/icons-material/Settings";
 import TroubleshootIcon from "@mui/icons-material/Troubleshoot";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
+import ChatIcon from "@mui/icons-material/Chat";
 
 const menu = [
   { label: "Dashboard", icon: <SpeedIcon fontSize="small" /> },
@@ -16,6 +17,7 @@ const menu = [
   { label: "Slow Queries", icon: <HourglassBottomIcon fontSize="small" /> },
   { label: "Query Analyzer", icon: <QueryStatsIcon fontSize="small" /> },
   { label: "Index Advisor", icon: <BoltIcon fontSize="small" /> },
+  { label: "Ask VeloxDiag", icon: <ChatIcon fontSize="small" /> },
   { label: "Settings", icon: <SettingsIcon fontSize="small" /> },
 ];
 

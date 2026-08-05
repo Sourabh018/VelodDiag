@@ -122,15 +122,6 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionError, setSuggestionError] = useState(null);
 
-  // AI wow feature #3 — migration script state. Same lazy-fetch-on-first-click
-  // pattern as narrative/suggestion above. Only rendered for MISSING_INDEX_CANDIDATE
-  // cards (isMissingIndex) — same gate as the query-plan block, since a migration
-  // script only makes sense when there's a real captured seq-scan plan behind it.
-  const [migrationExpanded, setMigrationExpanded] = useState(false);
-  const [migrationResult, setMigrationResult] = useState(null);
-  const [migrationLoading, setMigrationLoading] = useState(false);
-  const [migrationError, setMigrationError] = useState(null);
-
   async function handleToggleplans() {
     if (plansExpanded) {
       setPlansExpanded(false);
@@ -215,28 +206,6 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
     setSuggestionExpanded(true);
     if (suggestion !== null) return; // already fetched, just re-showing
     await fetchSuggestion();
-  }
-
-  async function handleToggleMigration() {
-    if (migrationExpanded) {
-      setMigrationExpanded(false);
-      return;
-    }
-    setMigrationExpanded(true);
-    if (migrationResult !== null) return; // already fetched, just re-showing
-
-    setMigrationLoading(true);
-    setMigrationError(null);
-    try {
-      const res = await apiClient.get("/api/diagnosis/recommendations/migration", {
-        params: { endpoint, ruleType },
-      });
-      setMigrationResult(res.data);
-    } catch (err) {
-      setMigrationError(err.message ?? "Failed to generate migration script");
-    } finally {
-      setMigrationLoading(false);
-    }
   }
 
   return (
@@ -451,83 +420,6 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
                   </Typography>
                 </Paper>
               ))}
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {isMissingIndex && (
-        <Box sx={{ marginTop: 1.5 }}>
-          <Button
-            size="small"
-            variant="text"
-            onClick={handleToggleMigration}
-            disabled={migrationLoading}
-            sx={{ fontSize: 12.5, textTransform: "none", color: "#D9A24B", padding: 0, minWidth: 0 }}
-          >
-            {migrationLoading ? <CircularProgress size={14} sx={{ mr: 1, color: "#D9A24B" }} /> : null}
-            {migrationExpanded ? "Hide migration script" : "Generate migration script"}
-          </Button>
-
-          {migrationExpanded && (
-            <Box sx={{ marginTop: 1 }}>
-              {migrationError && (
-                <Typography variant="caption" color="error">
-                  {migrationError}
-                </Typography>
-              )}
-
-              {migrationResult && !migrationResult.aiGenerated && (
-                <Typography variant="caption" color="text.secondary">
-                  {migrationResult.unavailableReason}
-                </Typography>
-              )}
-
-              {migrationResult?.aiGenerated && (
-                <Box
-                  sx={{
-                    padding: "10px 12px",
-                    borderRadius: "6px",
-                    backgroundColor: "rgba(217,162,75,0.06)",
-                    border: "1px solid rgba(217,162,75,0.18)",
-                  }}
-                >
-                  <Typography sx={{ fontSize: 11, color: "#F0C989", letterSpacing: "0.03em", marginBottom: 0.5 }}>
-                    MIGRATION SCRIPT
-                  </Typography>
-                  <Typography
-                    component="pre"
-                    sx={{
-                      fontFamily: "ui-monospace, monospace",
-                      fontSize: 12.5,
-                      lineHeight: 1.55,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      color: "#F0C989",
-                      margin: 0,
-                      marginBottom: 1,
-                    }}
-                  >
-                    {migrationResult.migrationScript}
-                  </Typography>
-                  <Typography sx={{ fontSize: 11, color: "#F0C989", letterSpacing: "0.03em", marginBottom: 0.5 }}>
-                    COMMIT MESSAGE
-                  </Typography>
-                  <Typography
-                    component="pre"
-                    sx={{
-                      fontFamily: "ui-monospace, monospace",
-                      fontSize: 12.5,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      color: "#D4D4D8",
-                      margin: 0,
-                    }}
-                  >
-                    {migrationResult.commitMessage}
-                  </Typography>
-                </Box>
-              )}
             </Box>
           )}
         </Box>
