@@ -19,10 +19,6 @@ const ruleTypeLabel = {
   ROOT_CAUSE_CORRELATION: "Root Cause Insight",
 };
 
-// Turns any SNAKE_CASE ruleType into "Title Case" automatically, e.g.
-// "SLOW_AND_ERROR_PRONE" -> "Slow And Error Prone". This is the fallback for
-// rules created dynamically via the rule engine (/api/rules) — new rules get
-// a readable label immediately, with no frontend code change required.
 function formatUnknownRuleType(ruleType) {
   return ruleType
     .toLowerCase()
@@ -35,13 +31,6 @@ function getRuleTypeLabel(ruleType) {
   return ruleTypeLabel[ruleType] ?? formatUnknownRuleType(ruleType);
 }
 
-// Formats a single evidence value for the footer line. Numbers with no
-// fractional part (counts, thresholds) render as plain integers; numbers
-// with a fractional part (durations, ratios) keep one decimal place.
-// Nested objects — e.g. MISSING_INDEX_CANDIDATE's candidateTables map of
-// { tableName: rowEstimate } — are expanded into readable "table (N rows)"
-// pairs instead of falling through to the default "[object Object]" string
-// coercion, which is what the naive template-literal approach produced.
 function formatEvidenceValue(value) {
   if (typeof value === "number") {
     return Number.isInteger(value) ? value.toString() : value.toFixed(1);
@@ -54,10 +43,14 @@ function formatEvidenceValue(value) {
   return String(value);
 }
 
-// Small dot + outlined tag instead of a filled MUI Chip — a filled pill on
-// every single card competes with the one card that's actually meant to
-// stand out (the correlation card, which keeps the primary-blue border).
-// Severity should read as a quiet signal, not a badge shouting on every row.
+// Keys rendered separately (not in the generic evidence line below) because
+// they get their own dedicated display treatment:
+// - conditionMatched: shown as its own "why this fired" line, not buried
+//   mid-list among counts and ratios.
+// - insufficientSampleSize: already implied by the message text itself when
+//   true; redundant as a raw evidence key.
+const EVIDENCE_KEYS_SHOWN_SEPARATELY = ["conditionMatched", "insufficientSampleSize"];
+
 function SeverityTag({ severity }) {
   const style = severityStyle[severity] ?? severityStyle.LOW;
   return (
@@ -80,43 +73,58 @@ function SeverityTag({ severity }) {
   );
 }
 
-// Rule types the backend never produces a recommendation for (see
-// RecommendationService.buildRecommendation's HIGH_ERROR_RATE/SERVER_ERROR/
-// ROOT_CAUSE_CORRELATION branch — intentionally no honest generic fix
-// exists for these). Every other rule type, including custom rules, CAN be
-// explained via /explain even if it has no static template.
+// Confidence badge — separate from SeverityTag on purpose. Severity answers
+// "how bad is this," confidence answers "how sure are we this reading is
+// real, not noise." Only renders when the backend actually set a confidence
+// value — SLOW_REQUEST and POSSIBLE_N_PLUS_ONE now carry one (consistency-
+// based), correlation findings always have one, other rule types have none
+// and the badge is simply omitted for them.
+const confidenceStyle = {
+  HIGH: "#8FD9A8",
+  MEDIUM: "#F0C989",
+  LOW: "#8A93A3",
+};
+
+function ConfidenceTag({ confidence }) {
+  if (!confidence) return null;
+  const color = confidenceStyle[confidence] ?? confidenceStyle.LOW;
+  return (
+    <Typography
+      sx={{
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 10.5,
+        letterSpacing: "0.04em",
+        color,
+        border: `1px solid ${color}33`,
+        padding: "2px 7px",
+        borderRadius: 10,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {confidence} CONFIDENCE
+    </Typography>
+  );
+}
+
 const NO_SUGGESTION_TYPES = ["HIGH_ERROR_RATE", "SERVER_ERROR", "ROOT_CAUSE_CORRELATION"];
 
 function FindingCard({ finding, showExplain = true, showSuggestion = false, autoFetchSuggestion = false, fetchDelayMs = 0, compact = false }) {
-  const { ruleType, severity, endpoint, message, evidence, relatedFindings } = finding;
+  const { ruleType, severity, endpoint, message, evidence, relatedFindings, confidence } = finding;
   const isCorrelation = ruleType === "ROOT_CAUSE_CORRELATION";
   const isCustomRule = !(ruleType in ruleTypeLabel) && !isCorrelation;
   const isMissingIndex = ruleType === "MISSING_INDEX_CANDIDATE";
+  const conditionMatched = evidence?.conditionMatched;
 
-  // Query-plan expand state — only relevant for MISSING_INDEX_CANDIDATE cards.
-  // Fetches on first expand only; subsequent toggles just show/hide the
-  // already-fetched plans rather than re-requesting.
   const [plansExpanded, setPlansExpanded] = useState(false);
   const [plans, setPlans] = useState(null);
   const [plansLoading, setPlansLoading] = useState(false);
   const [plansError, setPlansError] = useState(null);
 
-  // AI narrative state — same lazy-fetch-on-first-click pattern as the query
-  // plan toggle above. Available on every card (not just correlation cards)
-  // since the backend's getFindingsForEndpoint() pulls ALL findings for this
-  // endpoint regardless of which specific card triggered the fetch, so the
-  // narrative can reference findings beyond just the one on this card.
   const [narrativeExpanded, setNarrativeExpanded] = useState(false);
   const [narrative, setNarrative] = useState(null);
   const [narrativeLoading, setNarrativeLoading] = useState(false);
   const [narrativeError, setNarrativeError] = useState(null);
 
-  // AI suggestion state — same lazy-fetch-on-first-click pattern, but for the
-  // fix side rather than the root-cause side. Replaces the old always-visible
-  // static suggestedFix block, which rendered identical boilerplate text for
-  // every endpoint hitting the same ruleType. Endpoint + ruleType together
-  // identify which specific finding to tailor the suggestion to, since one
-  // endpoint can carry several active findings at once.
   const [suggestionExpanded, setSuggestionExpanded] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
@@ -128,7 +136,7 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
       return;
     }
     setPlansExpanded(true);
-    if (plans !== null) return; // already fetched, just re-showing
+    if (plans !== null) return;
 
     setPlansLoading(true);
     setPlansError(null);
@@ -150,7 +158,7 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
       return;
     }
     setNarrativeExpanded(true);
-    if (narrative !== null) return; // already fetched, just re-showing
+    if (narrative !== null) return;
 
     setNarrativeLoading(true);
     setNarrativeError(null);
@@ -183,12 +191,6 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
     }
   }
 
-  // Recommendations page passes autoFetchSuggestion=true — no click needed,
-  // fetch runs once on mount so every card shows its tailored suggestion
-  // directly. Diagnosis page leaves this false and keeps the manual
-  // click-to-reveal button (handleToggleSuggestion below), since that page
-  // renders every finding including ones without a fix — auto-firing a
-  // Gemini call per card there would burn quota on cards nobody's looking at.
   useEffect(() => {
     if (showSuggestion && autoFetchSuggestion && canSuggest) {
       setSuggestionExpanded(true);
@@ -204,7 +206,7 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
       return;
     }
     setSuggestionExpanded(true);
-    if (suggestion !== null) return; // already fetched, just re-showing
+    if (suggestion !== null) return;
     await fetchSuggestion();
   }
 
@@ -223,7 +225,10 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
         <Typography sx={{ fontFamily: "ui-monospace, monospace", fontSize: 14, color: "#EDEDEF" }}>
           {endpoint}
         </Typography>
-        <SeverityTag severity={severity} />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+          <ConfidenceTag confidence={confidence} />
+          <SeverityTag severity={severity} />
+        </Box>
       </Box>
 
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, marginBottom: 1 }}>
@@ -265,6 +270,25 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
         </Box>
       )}
 
+      {/* "Why this fired" — the literal rule condition that matched, verbatim
+          from the backend (evidence.conditionMatched). Given its own line so
+          it reads as a receipt/log line, not buried in the generic evidence
+          dump. Only renders for rule types that currently populate it. */}
+      {conditionMatched && !compact && (
+        <Typography
+          sx={{
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 11.5,
+            color: "#6B7280",
+            marginBottom: 1,
+            paddingLeft: 1,
+            borderLeft: "2px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          {conditionMatched}
+        </Typography>
+      )}
+
       {evidence && !compact && (
         <Typography
           sx={{
@@ -275,14 +299,12 @@ function FindingCard({ finding, showExplain = true, showSuggestion = false, auto
           }}
         >
           {Object.entries(evidence)
+            .filter(([key]) => !EVIDENCE_KEYS_SHOWN_SEPARATELY.includes(key))
             .map(([key, value]) => `${key}: ${formatEvidenceValue(value)}`)
             .join(" · ")}
         </Typography>
       )}
 
-      {/* Gated on canSuggest (rule type is capable of a fix), not the static
-          suggestedFix field — custom rules have no template but /explain can
-          still generate a fresh AI suggestion for them. */}
       {showSuggestion && canSuggest && (
         <Box sx={{ marginTop: 1.5 }}>
           {!autoFetchSuggestion && (
